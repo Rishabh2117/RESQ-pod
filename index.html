@@ -1,0 +1,1811 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>RESQ-Pod — Full 3D Interactive Model</title>
+  <style>
+    @import url('https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap');
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --bg: #06090f; --panel: rgba(8,14,26,0.92); --accent: #00d4ff;
+      --orange: #E8680A; --border: rgba(0,212,255,0.16); --glass: rgba(255,255,255,0.03);
+      --txt: #dde4f0; --muted: #556070;
+    }
+    body { font-family: 'Outfit', sans-serif; background: var(--bg); color: var(--txt); overflow: hidden; width: 100vw; height: 100vh; }
+    body::before {
+      content: ''; position: fixed; inset: 0; pointer-events: none; z-index: 0;
+      background: linear-gradient(rgba(0,212,255,0.02) 1px, transparent 1px), linear-gradient(90deg, rgba(0,212,255,0.02) 1px, transparent 1px);
+      background-size: 60px 60px; animation: gs 20s linear infinite;
+    }
+    @keyframes gs { to { background-position: 60px 60px; } }
+
+    canvas#c { position: fixed; inset: 0; z-index: 1; cursor: grab; }
+    canvas#c:active { cursor: grabbing; }
+
+    /* LOADER */
+    #loader { position: fixed; inset: 0; z-index: 200; display: flex; flex-direction: column; align-items: center; justify-content: center; background: var(--bg); transition: opacity 0.7s; }
+    #loader.gone { opacity: 0; pointer-events: none; }
+    .ld-ring { width: 80px; height: 80px; border-radius: 50%; border: 3px solid rgba(0,212,255,0.1); border-top-color: var(--accent); border-right-color: var(--orange); animation: spin 1s linear infinite; margin-bottom: 22px; position: relative; }
+    .ld-ring::after { content: ''; position: absolute; inset: 8px; border-radius: 50%; border: 2px solid transparent; border-bottom-color: #a78bfa; animation: spin 0.7s linear infinite reverse; }
+    @keyframes spin { to { transform: rotate(360deg); } }
+    .ld-t { font-size: 17px; font-weight: 700; margin-bottom: 5px; }
+    .ld-s { font-size: 12px; color: var(--muted); margin-bottom: 18px; }
+    .ld-bw { width: 200px; height: 3px; background: rgba(255,255,255,0.06); border-radius: 3px; overflow: hidden; }
+    .ld-b { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent), var(--orange)); border-radius: 3px; transition: width 0.25s; }
+
+    /* TOP */
+    .topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 10; display: flex; align-items: center; justify-content: space-between; padding: 14px 22px; background: linear-gradient(180deg, rgba(6,9,15,0.98) 0%, transparent 100%); pointer-events: none; }
+    .logo { display: flex; align-items: center; gap: 10px; }
+    .logo-icon { width: 40px; height: 40px; border-radius: 11px; background: linear-gradient(135deg, var(--orange), #ff9944); display: flex; align-items: center; justify-content: center; font-size: 21px; box-shadow: 0 0 22px rgba(232,104,10,0.55); animation: bp 3s ease-in-out infinite; }
+    @keyframes bp { 0%,100%{box-shadow:0 0 20px rgba(232,104,10,0.4)} 50%{box-shadow:0 0 40px rgba(232,104,10,0.75)} }
+    .logo-name { font-size: 21px; font-weight: 800; background: linear-gradient(90deg,var(--orange),#ffcc66); -webkit-background-clip: text; -webkit-text-fill-color: transparent; background-clip: text; }
+    .logo-tag { font-size: 10px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; margin-top: -2px; }
+    .chips { display: flex; gap: 7px; pointer-events: all; }
+    .chip { padding: 5px 12px; border-radius: 20px; font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; border: 1px solid var(--border); background: var(--glass); color: var(--accent); }
+    .chip.ora { color: var(--orange); border-color: rgba(232,104,10,0.3); }
+
+    /* LEFT PANEL */
+    .lpanel { position: fixed; left: 18px; top: 50%; transform: translateY(-50%); z-index: 10; width: 195px; background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 18px; backdrop-filter: blur(22px); box-shadow: 0 8px 36px rgba(0,0,0,0.55); }
+    .ph { font-size: 10px; font-weight: 700; letter-spacing: 2px; text-transform: uppercase; color: var(--accent); margin-bottom: 13px; display: flex; align-items: center; gap: 7px; }
+    .ph::before { content: ''; width: 3px; height: 14px; border-radius: 2px; background: var(--accent); display: block; }
+    .pr { display: flex; justify-content: space-between; align-items: center; padding: 6px 0; border-bottom: 1px solid rgba(255,255,255,0.04); }
+    .pr:last-child { border: none; }
+    .pl { font-size: 11px; color: var(--muted); }
+    .pv { font-size: 11px; font-weight: 600; }
+    .pv.a { color: var(--accent); }
+    .pv.o { color: var(--orange); }
+    .pv.g { color: #22cc66; }
+
+    /* RIGHT SIDEBAR */
+    .rsidebar { position: fixed; right: 18px; top: 50%; transform: translateY(-50%); z-index: 10; display: flex; flex-direction: column; gap: 7px; }
+    .sw { position: relative; }
+    .sb { width: 44px; height: 44px; border-radius: 12px; border: 1px solid var(--border); background: var(--panel); color: var(--muted); cursor: pointer; font-size: 19px; display: flex; align-items: center; justify-content: center; transition: all 0.22s; backdrop-filter: blur(20px); }
+    .sb:hover,.sb.on { background: rgba(0,212,255,0.12); color: var(--accent); border-color: var(--accent); box-shadow: 0 0 18px rgba(0,212,255,0.3); transform: scale(1.07); }
+    .sb.on { box-shadow: 0 0 24px rgba(0,212,255,0.45); }
+    .sb.ora-btn:hover,.sb.ora-btn.on { color: var(--orange); border-color: var(--orange); background: rgba(232,104,10,0.12); box-shadow: 0 0 18px rgba(232,104,10,0.35); }
+    .stt { position: absolute; right: 52px; top: 50%; transform: translateY(-50%); background: var(--panel); border: 1px solid var(--border); border-radius: 8px; padding: 5px 10px; font-size: 11px; white-space: nowrap; color: var(--txt); opacity: 0; pointer-events: none; transition: opacity 0.18s; backdrop-filter: blur(14px); }
+    .sw:hover .stt { opacity: 1; }
+
+    /* BOTTOM BAR */
+    .bbar { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; align-items: center; gap: 4px; background: var(--panel); border: 1px solid var(--border); border-radius: 50px; padding: 7px 10px; backdrop-filter: blur(22px); box-shadow: 0 8px 36px rgba(0,0,0,0.55); }
+    .bb { display: flex; align-items: center; gap: 4px; padding: 8px 13px; border-radius: 40px; border: none; background: transparent; color: var(--muted); font-family: 'Outfit',sans-serif; font-size: 12px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+    .bb:hover { background: rgba(0,212,255,0.1); color: var(--accent); }
+    .bb.active { background: rgba(0,212,255,0.15); color: var(--accent); border: 1px solid var(--border); }
+    .bb.cutaway-btn.active { background: rgba(232,104,10,0.15); color: var(--orange); border: 1px solid rgba(232,104,10,0.3); }
+    .bd { width: 1px; height: 22px; background: var(--border); margin: 0 2px; }
+
+    /* HINTS */
+    .hints { position: fixed; bottom: 76px; left: 50%; transform: translateX(-50%); z-index: 10; display: flex; gap: 16px; font-size: 11px; color: var(--muted); opacity: 0.55; pointer-events: none; transition: opacity 1.2s; }
+    .hints.fade { opacity: 0; }
+    .hk { background: rgba(255,255,255,0.07); border: 1px solid rgba(255,255,255,0.1); border-radius: 4px; padding: 1px 6px; font-size: 10px; margin-right: 4px; }
+
+    /* CUTAWAY LABEL */
+    #cutaway-label {
+      position: fixed; top: 80px; left: 50%; transform: translateX(-50%);
+      z-index: 10; padding: 8px 20px; border-radius: 30px;
+      background: rgba(232,104,10,0.18); border: 1px solid rgba(232,104,10,0.4);
+      color: var(--orange); font-size: 12px; font-weight: 700; letter-spacing: 1.5px;
+      text-transform: uppercase; display: none; backdrop-filter: blur(12px);
+    }
+    #cutaway-label.show { display: block; }
+  </style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="ld-ring"></div>
+  <div class="ld-t">Building RESQ-Pod</div>
+  <div class="ld-s">Constructing interior & exterior…</div>
+  <div class="ld-bw"><div class="ld-b" id="ldbar"></div></div>
+</div>
+
+<canvas id="c"></canvas>
+
+<div class="topbar">
+  <div class="logo">
+    <div class="logo-icon">🚑</div>
+    <div>
+      <div class="logo-name">RESQ-POD</div>
+      <div class="logo-tag">Stay Alive · Stay Locatable</div>
+    </div>
+  </div>
+  <div class="chips">
+    <div class="chip">Full Interior</div>
+    <div class="chip ora">Interactive 3D</div>
+  </div>
+</div>
+
+<div class="lpanel">
+  <div class="ph">Specifications</div>
+  <div class="pr"><span class="pl">Width</span><span class="pv a">2.1 m</span></div>
+  <div class="pr"><span class="pl">Height</span><span class="pv a">1.6 m</span></div>
+  <div class="pr"><span class="pl">Shell</span><span class="pv">Rotomolded HDPE</span></div>
+  <div class="pr"><span class="pl">Impact Layer</span><span class="pv">EPP Foam</span></div>
+  <div class="pr"><span class="pl">Frame</span><span class="pv">Steel / Aluminium</span></div>
+  <div class="pr"><span class="pl">Flotation</span><span class="pv">Closed-cell Foam</span></div>
+  <div class="pr"><span class="pl">Occupants</span><span class="pv o">3 (with harness)</span></div>
+  <div class="pr"><span class="pl">Air Supply</span><span class="pv g">24 – 72 hrs</span></div>
+  <div class="pr"><span class="pl">Beacon</span><span class="pv a">GNSS 406 MHz</span></div>
+  <div class="pr"><span class="pl">Comm</span><span class="pv">TTE + Acoustic</span></div>
+</div>
+
+<div class="rsidebar">
+  <div class="sw"><button class="sb" id="btn-rotate">🔄</button><div class="stt">Auto Rotate</div></div>
+  <div class="sw"><button class="sb" id="btn-wire">🔲</button><div class="stt">Wireframe</div></div>
+  <div class="sw"><button class="sb on" id="btn-cage-side">🛡️</button><div class="stt">Protective Pipes</div></div>
+  <div class="sw"><button class="sb" id="btn-beacon">💡</button><div class="stt">Beacon Light</div></div>
+  <div class="sw"><button class="sb" id="btn-light">🌈</button><div class="stt">Lighting Mode</div></div>
+  <div class="sw"><button class="sb" id="btn-reset">🎯</button><div class="stt">Reset Camera</div></div>
+  <div class="sw"><button class="sb" id="btn-ss">📷</button><div class="stt">Screenshot</div></div>
+</div>
+
+<div class="bbar">
+  <button class="bb" id="v-iso">◇ Isometric</button>
+  <div class="bd"></div>
+  <button class="bb" id="v-front">⬆ Front</button>
+  <button class="bb" id="v-side">↔ Side</button>
+  <button class="bb" id="v-top">⬇ Top</button>
+  <div class="bd"></div>
+  <button class="bb active" id="btn-cage">🛡️ Protective Pipes</button>
+  <div class="bd"></div>
+  <button class="bb cutaway-btn" id="v-cutaway">✂ Cutaway Interior</button>
+</div>
+
+<div class="hints" id="hints">
+  <span><span class="hk">Drag</span>Orbit</span>
+  <span><span class="hk">Right</span>Pan</span>
+  <span><span class="hk">Scroll</span>Zoom</span>
+</div>
+<div id="cutaway-label">✂ Interior Cutaway View</div>
+
+<script type="importmap">
+{
+  "imports": {
+    "three": "https://cdn.jsdelivr.net/npm/three@0.167.1/build/three.module.js",
+    "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.167.1/examples/jsm/"
+  }
+}
+</script>
+<script type="module">
+import * as THREE from 'three';
+import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+// ════════════════════════════════════════════
+//  RENDERER
+// ════════════════════════════════════════════
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true, preserveDrawingBuffer: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setSize(innerWidth, innerHeight);
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.2;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+renderer.localClippingEnabled = true;
+
+// ════════════════════════════════════════════
+//  SCENE & CAMERA
+// ════════════════════════════════════════════
+const scene = new THREE.Scene();
+scene.background = new THREE.Color(0x06090f);
+scene.fog = new THREE.Fog(0x06090f, 16, 38);
+
+const camera = new THREE.PerspectiveCamera(45, innerWidth / innerHeight, 0.01, 80);
+camera.position.set(3.8, 1.8, 4.2);
+
+const controls = new OrbitControls(camera, renderer.domElement);
+controls.enableDamping = true;
+controls.dampingFactor = 0.07;
+controls.target.set(0, 0.15, 0);
+controls.minDistance = 1.4;
+controls.maxDistance = 18;
+
+// ════════════════════════════════════════════
+//  CONSTANTS
+// ════════════════════════════════════════════
+const SW = 1.05;        // X/Z scale of ellipsoid
+const SH = 0.82;        // Y scale
+const SPLIT = Math.PI * 0.52; // angle where orange→white split is
+const ORANGE = 0xE8680A;
+const WHITE  = 0xEEEEEE;
+const METAL  = 0x888888;
+const DARK   = 0x222222;
+const YELLOW = 0xFFCC00;
+
+// Clipping plane for cutaway (clips front +Z half of exterior to view interior from front)
+const cutPlane = new THREE.Plane(new THREE.Vector3(0, 0, -1), 0.05);
+let cutawayMode = false;
+
+// ════════════════════════════════════════════
+//  HELPERS
+// ════════════════════════════════════════════
+function surf(dx, dy, dz) {
+  // Point on ellipsoid surface in direction (dx,dy,dz)
+  const L = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  return new THREE.Vector3(dx/L * SW, dy/L * SH, dz/L * SW);
+}
+function far(dx, dy, dz) {
+  const L = Math.sqrt(dx*dx + dy*dy + dz*dz);
+  return new THREE.Vector3(dx/L * SW * 60, dy/L * SH * 60, dz/L * SW * 60);
+}
+function mat(color, rough, metal, extra={}) {
+  return new THREE.MeshStandardMaterial({ color, roughness: rough, metalness: metal, ...extra });
+}
+function mesh(geo, m) {
+  const obj = new THREE.Mesh(geo, m);
+  obj.castShadow = true;
+  obj.receiveShadow = true;
+  return obj;
+}
+
+// ════════════════════════════════════════════
+//  POD GROUP
+// ════════════════════════════════════════════
+const podGroup = new THREE.Group();
+scene.add(podGroup);
+
+const protectiveCageGroup = new THREE.Group();
+podGroup.add(protectiveCageGroup);
+
+const exteriorMeshes = [];   // meshes that get clipping plane in cutaway
+const interiorGroup  = new THREE.Group(); // shown only in cutaway
+
+// ════════════════════════════════════════════
+//  EXTERIOR BUILD
+// ════════════════════════════════════════════
+function buildExterior() {
+
+  // ── UPPER BODY (orange dome) ──────────────
+  const upGeo = new THREE.SphereGeometry(1, 80, 48, 0, Math.PI*2, 0, SPLIT);
+  const upMesh = mesh(upGeo, mat(ORANGE, 0.22, 0.06));
+  upMesh.scale.set(SW, SH, SW);
+  podGroup.add(upMesh); exteriorMeshes.push(upMesh);
+
+  // ── LOWER BODY (white hull) ───────────────
+  const loGeo = new THREE.SphereGeometry(1, 80, 48, 0, Math.PI*2, SPLIT, Math.PI - SPLIT);
+  const loMesh = mesh(loGeo, mat(WHITE, 0.28, 0.03));
+  loMesh.scale.set(SW, SH, SW);
+  podGroup.add(loMesh); exteriorMeshes.push(loMesh);
+
+  // ── EQUATOR SEAM TRIM (flush horizontal, tightly hugs hull) ──
+  const splitY = Math.cos(SPLIT) * SH;
+  const splitR = Math.sin(SPLIT) * SW;
+  const waistTrim = mesh(new THREE.TorusGeometry(splitR * 0.997, 0.012, 10, 120), mat(0x181818, 0.8, 0.1));
+  waistTrim.rotation.x = Math.PI / 2;
+  waistTrim.position.y = splitY;
+  podGroup.add(waistTrim); exteriorMeshes.push(waistTrim);
+
+  // ── PORTHOLE (LEFT-FRONT) ─────────────────
+  // From front view: porthole is upper-left, in the orange zone
+  const pDir = new THREE.Vector3(-0.62, 0.15, 0.76).normalize();
+  // Push outside hull surface to avoid overlap
+  const pPos = surf(pDir.x, pDir.y, pDir.z).multiplyScalar(1.012);
+  const pLook = far(pDir.x, pDir.y, pDir.z);
+
+  // Chrome outer ring
+  const pRing = mesh(new THREE.TorusGeometry(0.152, 0.028, 18, 80), mat(METAL, 0.25, 0.9));
+  pRing.position.copy(pPos); pRing.lookAt(pLook);
+  podGroup.add(pRing); exteriorMeshes.push(pRing);
+
+  // Rubber seal ring (inner, dark)
+  const pSeal = mesh(new THREE.TorusGeometry(0.125, 0.012, 10, 80), mat(0x111111, 0.9, 0.1));
+  pSeal.position.copy(pPos.clone().add(pDir.clone().multiplyScalar(0.016)));
+  pSeal.lookAt(pLook);
+  podGroup.add(pSeal); exteriorMeshes.push(pSeal);
+
+  // Blue tinted glass
+  const pGlass = mesh(new THREE.CircleGeometry(0.122, 80),
+    mat(0x1a3d6a, 0.04, 0.15, { transparent: true, opacity: 0.88 }));
+  pGlass.position.copy(pPos.clone().add(pDir.clone().multiplyScalar(0.014)));
+  pGlass.lookAt(pLook);
+  podGroup.add(pGlass); exteriorMeshes.push(pGlass);
+
+  // Glass glint (highlight)
+  const glint = mesh(new THREE.CircleGeometry(0.035, 24), mat(0xaaddff, 0.1, 0, { transparent: true, opacity: 0.45 }));
+  glint.position.copy(pPos.clone().add(pDir.clone().multiplyScalar(0.016)));
+  glint.position.x -= 0.04; glint.position.y += 0.04;
+  glint.lookAt(pLook);
+  podGroup.add(glint); exteriorMeshes.push(glint);
+
+  // ── ACCESS HATCH (FRONT-CENTER) WITH RESQ POD BRANDING ──
+  const hDir = new THREE.Vector3(0.0, -0.05, 1.0).normalize();
+  const hBase = surf(hDir.x, hDir.y, hDir.z).multiplyScalar(1.018);
+  const hLook = far(hDir.x, hDir.y, hDir.z);
+
+  const hatchGroup = new THREE.Group();
+  hatchGroup.position.copy(hBase);
+  hatchGroup.lookAt(hLook);
+  podGroup.add(hatchGroup);
+
+  // Dark seam / backplate
+  const seam = mesh(new THREE.BoxGeometry(0.556, 0.655, 0.012), mat(0x111111, 0.9, 0.05));
+  seam.position.set(0, 0, 0.006);
+  hatchGroup.add(seam); exteriorMeshes.push(seam);
+
+  // Orange outer frame
+  const hFrame = mesh(new THREE.BoxGeometry(0.536, 0.636, 0.018), mat(ORANGE, 0.22, 0.05));
+  hFrame.position.set(0, 0, 0.013);
+  hatchGroup.add(hFrame); exteriorMeshes.push(hFrame);
+
+  // White inner door panel
+  const hPanel = mesh(new THREE.BoxGeometry(0.485, 0.585, 0.022), mat(0xEEEEEE, 0.28, 0.03));
+  hPanel.position.set(0, 0, 0.020);
+  hatchGroup.add(hPanel); exteriorMeshes.push(hPanel);
+
+  // High-Resolution Door Graphic with RESQ POD Branding & Safety Graphics
+  const doorCanvas = document.createElement('canvas');
+  doorCanvas.width = 1024;
+  doorCanvas.height = 1024;
+  const ctx = doorCanvas.getContext('2d');
+
+  // Background - Off-white marine coating
+  ctx.fillStyle = '#EDEDED';
+  ctx.fillRect(0, 0, 1024, 1024);
+
+  // Subtle panel inner bevel line
+  ctx.strokeStyle = '#D0D4DC';
+  ctx.lineWidth = 6;
+  ctx.strokeRect(24, 24, 976, 976);
+
+  // TOP HAZARD STRIPES BAR
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(30, 30, 964, 48);
+  ctx.clip();
+  ctx.fillStyle = '#E8680A';
+  ctx.fillRect(30, 30, 964, 48);
+  ctx.fillStyle = '#111111';
+  for (let x = -50; x < 1100; x += 55) {
+    ctx.beginPath();
+    ctx.moveTo(x, 30);
+    ctx.lineTo(x + 28, 30);
+    ctx.lineTo(x + 56, 78);
+    ctx.lineTo(x + 28, 78);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  // EMERGENCY LOGO & RESQ POD HEADER
+  // Orange Emblem Box
+  ctx.fillStyle = '#E8680A';
+  ctx.beginPath();
+  if (ctx.roundRect) {
+    ctx.roundRect(90, 115, 140, 140, 22);
+  } else {
+    ctx.rect(90, 115, 140, 140);
+  }
+  ctx.fill();
+
+  // White Cross / Rescue Symbol inside Emblem
+  ctx.fillStyle = '#FFFFFF';
+  ctx.fillRect(145, 135, 30, 100);
+  ctx.fillRect(110, 170, 100, 30);
+
+  // "RESQ POD" Big Bold Typography
+  ctx.fillStyle = '#111827';
+  ctx.font = '900 98px Outfit, Arial Black, sans-serif';
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('RESQ', 255, 160);
+
+  ctx.fillStyle = '#E8680A';
+  ctx.fillText('POD', 560, 160);
+
+  // Subtitle
+  ctx.fillStyle = '#4B5563';
+  ctx.font = '700 30px Outfit, sans-serif';
+  ctx.letterSpacing = '4px';
+  ctx.fillText('SURVIVAL & RESCUE CAPSULE', 260, 225);
+
+  // Horizontal separator line
+  ctx.strokeStyle = '#E8680A';
+  ctx.lineWidth = 5;
+  ctx.beginPath();
+  ctx.moveTo(50, 295);
+  ctx.lineTo(974, 295);
+  ctx.stroke();
+
+  // SPECIFICATION TILES (Middle)
+  const drawTile = (x, y, w, h, label, val, color) => {
+    ctx.fillStyle = '#DFE3EB';
+    ctx.fillRect(x, y, w, h);
+    ctx.strokeStyle = '#CBD2DE';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x, y, w, h);
+
+    ctx.fillStyle = '#6B7280';
+    ctx.font = '600 24px Outfit, sans-serif';
+    ctx.fillText(label, x + 18, y + 36);
+
+    ctx.fillStyle = color || '#111827';
+    ctx.font = '800 30px Outfit, sans-serif';
+    ctx.fillText(val, x + 18, y + 80);
+  };
+
+  drawTile(60, 330, 430, 105, 'CAPACITY', '3 PERSONS (HARNESSED)', '#E8680A');
+  drawTile(534, 330, 430, 105, 'LIFE SUPPORT', '72 HOURS AIR / CO₂', '#009944');
+  drawTile(60, 460, 430, 105, 'PRESSURE TESTED', 'DEPTH: 30 METERS', '#1F2937');
+  drawTile(534, 460, 430, 105, 'BEACON COMM', 'GNSS 406 MHz + TTE', '#0077CC');
+
+  // EMERGENCY HATCH INSTRUCTION BOX (Bottom)
+  ctx.fillStyle = '#FFF5F5';
+  ctx.fillRect(100, 605, 824, 260);
+  ctx.strokeStyle = '#DC2626';
+  ctx.lineWidth = 5;
+  ctx.strokeRect(100, 605, 824, 260);
+
+  ctx.fillStyle = '#DC2626';
+  ctx.font = '900 42px Outfit, sans-serif';
+  ctx.textAlign = 'center';
+  ctx.fillText('⚠ EMERGENCY ESCAPE HATCH ⚠', 512, 665);
+
+  ctx.fillStyle = '#1F2937';
+  ctx.font = '700 32px Outfit, sans-serif';
+  ctx.fillText('ROTATE HANDLE DOWNWARD & PULL FIRM', 512, 730);
+
+  // Chevron Arrows pointing down to handle
+  ctx.fillStyle = '#E8680A';
+  ctx.font = '900 46px sans-serif';
+  ctx.fillText('▼   ▼   ▼', 512, 800);
+
+  // BOTTOM HAZARD STRIPES BAR
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(30, 946, 964, 48);
+  ctx.clip();
+  ctx.fillStyle = '#E8680A';
+  ctx.fillRect(30, 946, 964, 48);
+  ctx.fillStyle = '#111111';
+  for (let x = -50; x < 1100; x += 55) {
+    ctx.beginPath();
+    ctx.moveTo(x, 946);
+    ctx.lineTo(x + 28, 946);
+    ctx.lineTo(x + 56, 994);
+    ctx.lineTo(x + 28, 994);
+    ctx.closePath();
+    ctx.fill();
+  }
+  ctx.restore();
+
+  const doorTex = new THREE.CanvasTexture(doorCanvas);
+  doorTex.anisotropy = renderer.capabilities.getMaxAnisotropy();
+  doorTex.needsUpdate = true;
+
+  const decalMat = new THREE.MeshStandardMaterial({
+    map: doorTex,
+    roughness: 0.35,
+    metalness: 0.05,
+    polygonOffset: true,
+    polygonOffsetFactor: -3,
+    polygonOffsetUnits: -3
+  });
+  const doorDecal = mesh(new THREE.PlaneGeometry(0.478, 0.578), decalMat);
+  doorDecal.position.set(0, 0, 0.032);
+  hatchGroup.add(doorDecal); exteriorMeshes.push(doorDecal);
+
+  // Left Hinges
+  for (const hy of [-0.22, 0.22]) {
+    const hinge = mesh(new THREE.BoxGeometry(0.038, 0.07, 0.024), mat(METAL, 0.3, 0.85));
+    hinge.position.set(-0.24, hy, 0.028);
+    hatchGroup.add(hinge); exteriorMeshes.push(hinge);
+    // Hinge pin
+    const pin = mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.078, 8), mat(0x333333, 0.2, 0.9));
+    pin.position.set(-0.24, hy, 0.036);
+    hatchGroup.add(pin); exteriorMeshes.push(pin);
+  }
+
+  // Corner Locking Bolts
+  for (const [bx, by] of [[0.21, 0.25], [-0.21, 0.25], [0.21, -0.25], [-0.21, -0.25]]) {
+    const bolt = mesh(new THREE.CylinderGeometry(0.014, 0.014, 0.018, 8), mat(0xCCCCCC, 0.25, 0.9));
+    bolt.rotation.x = Math.PI / 2;
+    bolt.position.set(bx, by, 0.034);
+    hatchGroup.add(bolt); exteriorMeshes.push(bolt);
+  }
+
+  // Heavy-Duty Rescue Door Handle (rotating latch)
+  const handleBase = mesh(new THREE.CylinderGeometry(0.022, 0.022, 0.018, 12), mat(0x222222, 0.4, 0.8));
+  handleBase.rotation.x = Math.PI / 2;
+  handleBase.position.set(0, -0.19, 0.033);
+  hatchGroup.add(handleBase); exteriorMeshes.push(handleBase);
+
+  const handle = mesh(new THREE.TorusGeometry(0.052, 0.012, 10, 32, Math.PI), mat(0xD8D8D8, 0.2, 0.9));
+  handle.position.set(0, -0.19, 0.046);
+  hatchGroup.add(handle); exteriorMeshes.push(handle);
+
+  // ── RIGHT SIDE: SMALL ORANGE ACCESS SQUARE ─
+  const sDir = new THREE.Vector3(0.72, -0.05, 0.7).normalize();
+  // Push outside the hull surface (1.018) to prevent body overlap
+  const sPos = surf(sDir.x, sDir.y, sDir.z).multiplyScalar(1.018);
+  const sLook = far(sDir.x, sDir.y, sDir.z);
+  const sPanel = mesh(new THREE.BoxGeometry(0.2, 0.15, 0.016), mat(ORANGE, 0.3, 0.05));
+  sPanel.material.polygonOffset = true; sPanel.material.polygonOffsetFactor = -2; sPanel.material.polygonOffsetUnits = -2;
+  sPanel.renderOrder = 2;
+  sPanel.position.copy(sPos); sPanel.lookAt(sLook);
+  podGroup.add(sPanel); exteriorMeshes.push(sPanel);
+
+  // ── TOP DETAILS ───────────────────────────
+  const topY = SH * 0.98;
+
+  // LED warning light (amber dome) — top-center-right
+  const ledBaseM = mesh(new THREE.CylinderGeometry(0.048, 0.056, 0.06, 16), mat(DARK, 0.7, 0.3));
+  ledBaseM.position.set(0.28, topY + 0.01, -0.22);
+  podGroup.add(ledBaseM); exteriorMeshes.push(ledBaseM);
+
+  const ledDomeGeo = new THREE.SphereGeometry(0.055, 18, 9, 0, Math.PI*2, 0, Math.PI/2);
+  const ledDomeMat = mat(YELLOW, 0.08, 0, { emissive: new THREE.Color(0xFFAA00), emissiveIntensity: 2.2, transparent: true, opacity: 0.92 });
+  const ledDome = mesh(ledDomeGeo, ledDomeMat);
+  ledDome.position.set(0.28, topY + 0.062, -0.22);
+  ledDome.rotation.x = Math.PI;
+  podGroup.add(ledDome); exteriorMeshes.push(ledDome);
+
+  // GNSS+406MHz beacon housing (yellow popup) — top-center
+  const gnssHouseM = mesh(new THREE.CylinderGeometry(0.054, 0.065, 0.17, 20), mat(YELLOW, 0.32, 0.12));
+  gnssHouseM.position.set(-0.12, topY + 0.085, 0.2);
+  podGroup.add(gnssHouseM); exteriorMeshes.push(gnssHouseM);
+
+  const gnssCapGeo = new THREE.SphereGeometry(0.054, 16, 8, 0, Math.PI*2, 0, Math.PI/2);
+  const gnssCap = mesh(gnssCapGeo, mat(YELLOW, 0.32, 0.12));
+  gnssCap.position.set(-0.12, topY + 0.17, 0.2);
+  gnssCap.rotation.x = Math.PI;
+  podGroup.add(gnssCap); exteriorMeshes.push(gnssCap);
+
+  // GNSS antenna rod
+  const gnssRod = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.42, 8), mat(METAL, 0.38, 0.92));
+  gnssRod.position.set(-0.12, topY + 0.38, 0.2);
+  podGroup.add(gnssRod); exteriorMeshes.push(gnssRod);
+  const gnssTip = mesh(new THREE.SphereGeometry(0.014, 8, 8), mat(METAL, 0.3, 0.9));
+  gnssTip.position.set(-0.12, topY + 0.595, 0.2);
+  podGroup.add(gnssTip); exteriorMeshes.push(gnssTip);
+
+  // TTE antenna (thin tilted rod)
+  const tteGrp = new THREE.Group();
+  tteGrp.add(mesh(new THREE.CylinderGeometry(0.007, 0.007, 0.65, 8), mat(METAL, 0.38, 0.92)));
+  tteGrp.position.set(0.2, topY + 0.325, 0.22);
+  tteGrp.rotation.z = 0.09;
+  podGroup.add(tteGrp); exteriorMeshes.push(tteGrp.children[0]);
+
+  // Ventilation fan — top-left area
+  const ventPos = new THREE.Vector3(-0.28, topY + 0.01, -0.1);
+  const ventDisk = mesh(new THREE.CylinderGeometry(0.13, 0.13, 0.038, 40), mat(0x444444, 0.65, 0.38));
+  ventDisk.position.copy(ventPos);
+  podGroup.add(ventDisk); exteriorMeshes.push(ventDisk);
+  for (let i = 0; i < 7; i++) {
+    const g = mesh(new THREE.BoxGeometry(0.22, 0.018, 0.01), mat(DARK, 0.8, 0.2));
+    g.position.copy(ventPos.clone().add(new THREE.Vector3(0, 0.028, -0.12 + i * 0.04)));
+    podGroup.add(g); exteriorMeshes.push(g);
+  }
+  const fanHub = mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.045, 12), mat(METAL, 0.35, 0.8));
+  fanHub.position.copy(ventPos.clone().add(new THREE.Vector3(0, 0.03, 0)));
+  podGroup.add(fanHub); exteriorMeshes.push(fanHub);
+
+  // SKID RAILS (bottom)
+  const skidMat = mat(0x555555, 0.5, 0.5);
+  for (const xOff of [-0.55, 0.55]) {
+    const skid = mesh(new THREE.BoxGeometry(0.065, 0.065, 1.7), skidMat);
+    skid.position.set(xOff, -SH + 0.038, 0);
+    podGroup.add(skid); exteriorMeshes.push(skid);
+  }
+
+  // Reflective platform
+  const plat = mesh(new THREE.CylinderGeometry(1.9, 1.9, 0.038, 80), mat(0x0a1018, 0.08, 0.92));
+  plat.position.y = -SH - 0.018;
+  plat.receiveShadow = true;
+  podGroup.add(plat);
+
+  // Glowing rings
+  const ring1 = mesh(new THREE.TorusGeometry(1.9, 0.022, 8, 160), new THREE.MeshStandardMaterial({ color: 0x00d4ff, emissive: 0x00d4ff, emissiveIntensity: 3 }));
+  ring1.rotation.x = Math.PI/2; ring1.position.y = -SH - 0.012;
+  podGroup.add(ring1);
+
+  const ring2 = mesh(new THREE.TorusGeometry(1.35, 0.014, 8, 120), new THREE.MeshStandardMaterial({ color: ORANGE, emissive: ORANGE, emissiveIntensity: 2 }));
+  ring2.rotation.x = Math.PI/2; ring2.position.y = -SH - 0.012;
+  podGroup.add(ring2);
+
+  return ledDomeMat;
+}
+
+// ════════════════════════════════════════════
+//  PROTECTIVE OUTER EXOSKELETON PIPES
+// ════════════════════════════════════════════
+function buildProtectiveCage() {
+  const cg = protectiveCageGroup;
+  const pipeMat = mat(ORANGE, 0.28, 0.45); // Tough powder-coated safety orange
+  const jointMat = mat(0x282e38, 0.35, 0.82); // Heavy-duty gunmetal alloy joints / stanchions
+  const silverMat = mat(0xdddddd, 0.2, 0.9); // Stainless hardware & lifting shackles
+
+  function addPipe(points, rad = 0.034, m = pipeMat) {
+    const curve = new THREE.CatmullRomCurve3(points);
+    const geo = new THREE.TubeGeometry(curve, 44, rad, 12, false);
+    const p = mesh(geo, m);
+    cg.add(p);
+    exteriorMeshes.push(p);
+    return p;
+  }
+
+  // 1. Left Longitudinal Overhead Arch Pipe (curving from front bottom over roof to rear bottom)
+  addPipe([
+    new THREE.Vector3(-0.55, -SH + 0.08, 0.88),
+    new THREE.Vector3(-0.56, 0.10, 0.94),
+    new THREE.Vector3(-0.52, SH + 0.12, 0.45),
+    new THREE.Vector3(-0.48, SH + 0.20, 0.0),
+    new THREE.Vector3(-0.52, SH + 0.12, -0.45),
+    new THREE.Vector3(-0.56, 0.10, -0.94),
+    new THREE.Vector3(-0.55, -SH + 0.08, -0.88),
+  ]);
+
+  // 2. Right Longitudinal Overhead Arch Pipe
+  addPipe([
+    new THREE.Vector3(0.55, -SH + 0.08, 0.88),
+    new THREE.Vector3(0.56, 0.10, 0.94),
+    new THREE.Vector3(0.52, SH + 0.12, 0.45),
+    new THREE.Vector3(0.48, SH + 0.20, 0.0),
+    new THREE.Vector3(0.52, SH + 0.12, -0.45),
+    new THREE.Vector3(0.56, 0.10, -0.94),
+    new THREE.Vector3(0.55, -SH + 0.08, -0.88),
+  ]);
+
+  // 3. Transverse Bridge Roll-Bars (Connecting Left and Right across the roof to form protective cage)
+  // Front Bridge
+  addPipe([
+    new THREE.Vector3(-0.52, SH + 0.12, 0.45),
+    new THREE.Vector3(0.0, SH + 0.19, 0.47),
+    new THREE.Vector3(0.52, SH + 0.12, 0.45),
+  ], 0.028);
+
+  // Central Overhead Bridge (arches over beacon & antenna)
+  addPipe([
+    new THREE.Vector3(-0.48, SH + 0.20, 0.0),
+    new THREE.Vector3(0.0, SH + 0.27, 0.0),
+    new THREE.Vector3(0.48, SH + 0.20, 0.0),
+  ], 0.030);
+
+  // Rear Bridge
+  addPipe([
+    new THREE.Vector3(-0.52, SH + 0.12, -0.45),
+    new THREE.Vector3(0.0, SH + 0.19, -0.47),
+    new THREE.Vector3(0.52, SH + 0.12, -0.45),
+  ], 0.028);
+
+  // 4. FRONT PROTECTIVE CRASH BUMPERS & ABOVE-DOOR ROLL-CAGE CANOPY
+  // 4A. Front Lower Bumper (curves around bottom below door)
+  addPipe([
+    new THREE.Vector3(-0.56, -0.32, 0.94),
+    new THREE.Vector3(-0.42, -0.42, 1.04),
+    new THREE.Vector3(0.0, -0.46, 1.08),
+    new THREE.Vector3(0.42, -0.42, 1.04),
+    new THREE.Vector3(0.56, -0.32, 0.94),
+  ], 0.030);
+
+  // 4B. Front Above-Door Header Brow Arch Pipe (protective canopy bar directly framing top of door)
+  addPipe([
+    new THREE.Vector3(-0.57, 0.34, 0.91),
+    new THREE.Vector3(-0.32, 0.365, 1.04),
+    new THREE.Vector3(0.0, 0.38, 1.08),
+    new THREE.Vector3(0.32, 0.365, 1.04),
+    new THREE.Vector3(0.57, 0.34, 0.91),
+  ], 0.032);
+
+  // 4C. Front Upper Brow Deflector Bar (sweeping across upper front dome above door space)
+  addPipe([
+    new THREE.Vector3(-0.55, 0.55, 0.74),
+    new THREE.Vector3(-0.28, 0.58, 0.86),
+    new THREE.Vector3(0.0, 0.59, 0.90),
+    new THREE.Vector3(0.28, 0.58, 0.86),
+    new THREE.Vector3(0.55, 0.55, 0.74),
+  ], 0.028);
+
+  // 4D. Front Canopy Vertical & Diagonal Gusset Struts (reinforcing the space above the door)
+  addPipe([
+    new THREE.Vector3(-0.25, 0.365, 1.03),
+    new THREE.Vector3(-0.22, 0.57, 0.85),
+    new THREE.Vector3(-0.24, SH + 0.16, 0.46),
+  ], 0.024);
+
+  addPipe([
+    new THREE.Vector3(0.25, 0.365, 1.03),
+    new THREE.Vector3(0.22, 0.57, 0.85),
+    new THREE.Vector3(0.24, SH + 0.16, 0.46),
+  ], 0.024);
+
+  addPipe([
+    new THREE.Vector3(0.0, 0.59, 0.90),
+    new THREE.Vector3(0.0, SH + 0.19, 0.47),
+  ], 0.026);
+
+  // 5. SIDE PROTECTIVE ROLL-CAGE PIPES (Full lateral crash & rub-rail system on left & right)
+  for (const signX of [-1, 1]) {
+    // 5A. Upper Lateral Crash Rail (Upper Shoulder Guard at y ≈ +0.28)
+    addPipe([
+      new THREE.Vector3(signX * 0.56, 0.24, 0.84),
+      new THREE.Vector3(signX * (SW * 0.94 + 0.08), 0.28, 0.42),
+      new THREE.Vector3(signX * (SW + 0.09), 0.28, 0.0),
+      new THREE.Vector3(signX * (SW * 0.94 + 0.08), 0.28, -0.42),
+      new THREE.Vector3(signX * 0.56, 0.24, -0.84),
+    ], 0.032);
+
+    // 5B. Mid Lateral Crash Bumper Pipe (Main Heavy Rub-Rail at widest equator y ≈ 0.00)
+    addPipe([
+      new THREE.Vector3(signX * 0.58, 0.00, 0.88),
+      new THREE.Vector3(signX * (SW * 0.96 + 0.09), 0.00, 0.45),
+      new THREE.Vector3(signX * (SW + 0.12), 0.00, 0.0),
+      new THREE.Vector3(signX * (SW * 0.96 + 0.09), 0.00, -0.45),
+      new THREE.Vector3(signX * 0.58, 0.00, -0.88),
+    ], 0.034);
+
+    // 5C. Lower Lateral Flank Pipe (Rock-Slider / Lower Deflector Rail at y ≈ -0.28)
+    addPipe([
+      new THREE.Vector3(signX * 0.56, -0.26, 0.84),
+      new THREE.Vector3(signX * (SW * 0.92 + 0.08), -0.28, 0.40),
+      new THREE.Vector3(signX * (SW * 0.96 + 0.09), -0.28, 0.0),
+      new THREE.Vector3(signX * (SW * 0.92 + 0.08), -0.28, -0.40),
+      new THREE.Vector3(signX * 0.56, -0.26, -0.84),
+    ], 0.030);
+
+    // 5D. Vertical Side Roll-Bar Stanchion Uprights (Tying overhead arch, side pipes, and skid rail together)
+    // Front Side Upright (z = 0.42)
+    addPipe([
+      new THREE.Vector3(signX * 0.52, SH + 0.12, 0.42),
+      new THREE.Vector3(signX * (SW * 0.94 + 0.08), 0.28, 0.42),
+      new THREE.Vector3(signX * (SW * 0.96 + 0.09), 0.00, 0.45),
+      new THREE.Vector3(signX * (SW * 0.92 + 0.08), -0.28, 0.40),
+      new THREE.Vector3(signX * 0.55, -SH + 0.06, 0.42),
+    ], 0.028);
+
+    // Center Side Upright (z = 0.00)
+    addPipe([
+      new THREE.Vector3(signX * 0.48, SH + 0.20, 0.0),
+      new THREE.Vector3(signX * (SW + 0.09), 0.28, 0.0),
+      new THREE.Vector3(signX * (SW + 0.12), 0.00, 0.0),
+      new THREE.Vector3(signX * (SW * 0.96 + 0.09), -0.28, 0.0),
+      new THREE.Vector3(signX * 0.55, -SH + 0.06, 0.0),
+    ], 0.028);
+
+    // Rear Side Upright (z = -0.42)
+    addPipe([
+      new THREE.Vector3(signX * 0.52, SH + 0.12, -0.42),
+      new THREE.Vector3(signX * (SW * 0.94 + 0.08), 0.28, -0.42),
+      new THREE.Vector3(signX * (SW * 0.96 + 0.09), 0.00, -0.45),
+      new THREE.Vector3(signX * (SW * 0.92 + 0.08), -0.28, -0.40),
+      new THREE.Vector3(signX * 0.55, -SH + 0.06, -0.42),
+    ], 0.028);
+
+    // 5E. Diagonal Truss Gusset Braces (Triangulated Space-Frame on each flank)
+    addPipe([
+      new THREE.Vector3(signX * (SW * 0.96 + 0.09), 0.00, 0.45),
+      new THREE.Vector3(signX * (SW + 0.09), 0.28, 0.0),
+    ], 0.024);
+
+    addPipe([
+      new THREE.Vector3(signX * (SW * 0.96 + 0.09), 0.00, -0.45),
+      new THREE.Vector3(signX * (SW + 0.09), 0.28, 0.0),
+    ], 0.024);
+
+    addPipe([
+      new THREE.Vector3(signX * (SW * 0.92 + 0.08), -0.28, 0.40),
+      new THREE.Vector3(signX * (SW + 0.12), 0.00, 0.0),
+    ], 0.024);
+
+    addPipe([
+      new THREE.Vector3(signX * (SW * 0.92 + 0.08), -0.28, -0.40),
+      new THREE.Vector3(signX * (SW + 0.12), 0.00, 0.0),
+    ], 0.024);
+  }
+
+  // 6. FULL REAR PROTECTIVE ROLL-CAGE & CRASH FRAME (Back of Pod)
+  // 6A. Rear Upper Transverse Crash Bar (at y ≈ +0.30)
+  addPipe([
+    new THREE.Vector3(-0.57, 0.30, -0.93),
+    new THREE.Vector3(-0.30, 0.33, -1.05),
+    new THREE.Vector3(0.0, 0.34, -1.09),
+    new THREE.Vector3(0.30, 0.33, -1.05),
+    new THREE.Vector3(0.57, 0.30, -0.93),
+  ], 0.032);
+
+  // 6B. Rear Mid-Level Heavy Rub-Rail Bumper (Main Equatorial Rear Crash Bar at y ≈ +0.04)
+  addPipe([
+    new THREE.Vector3(-0.62, 0.02, -0.98),
+    new THREE.Vector3(-0.35, 0.03, -1.14),
+    new THREE.Vector3(0.0, 0.04, -1.18),
+    new THREE.Vector3(0.35, 0.03, -1.14),
+    new THREE.Vector3(0.62, 0.02, -0.98),
+  ], 0.034);
+
+  // 6C. Rear Lower-Mid Crash Rail (at y ≈ -0.24)
+  addPipe([
+    new THREE.Vector3(-0.59, -0.25, -0.94),
+    new THREE.Vector3(-0.32, -0.24, -1.08),
+    new THREE.Vector3(0.0, -0.24, -1.13),
+    new THREE.Vector3(0.32, -0.24, -1.08),
+    new THREE.Vector3(0.59, -0.25, -0.94),
+  ], 0.030);
+
+  // 6D. Rear Bottom Bumper (lower hull protection)
+  addPipe([
+    new THREE.Vector3(-0.56, -0.32, -0.94),
+    new THREE.Vector3(-0.42, -0.42, -1.04),
+    new THREE.Vector3(0.0, -0.46, -1.08),
+    new THREE.Vector3(0.42, -0.42, -1.04),
+    new THREE.Vector3(0.56, -0.32, -0.94),
+  ], 0.030);
+
+  // 6E. Rear Vertical Spine Roll-Bars (Tying roof bridge, upper bar, mid bumper, lower bars)
+  // Left rear vertical spine
+  addPipe([
+    new THREE.Vector3(-0.26, SH + 0.16, -0.46),
+    new THREE.Vector3(-0.26, 0.32, -1.04),
+    new THREE.Vector3(-0.26, 0.04, -1.16),
+    new THREE.Vector3(-0.26, -0.24, -1.12),
+    new THREE.Vector3(-0.26, -0.44, -1.06),
+  ], 0.028);
+
+  // Right rear vertical spine
+  addPipe([
+    new THREE.Vector3(0.26, SH + 0.16, -0.46),
+    new THREE.Vector3(0.26, 0.32, -1.04),
+    new THREE.Vector3(0.26, 0.04, -1.16),
+    new THREE.Vector3(0.26, -0.24, -1.12),
+    new THREE.Vector3(0.26, -0.44, -1.06),
+  ], 0.028);
+
+  // 6F. Rear Diagonal Space-Frame X-Braces (Triangulated crash structure on back)
+  addPipe([
+    new THREE.Vector3(-0.54, 0.28, -0.92),
+    new THREE.Vector3(0.0, 0.04, -1.18),
+  ], 0.024);
+
+  addPipe([
+    new THREE.Vector3(0.54, 0.28, -0.92),
+    new THREE.Vector3(0.0, 0.04, -1.18),
+  ], 0.024);
+
+  addPipe([
+    new THREE.Vector3(0.0, 0.04, -1.18),
+    new THREE.Vector3(-0.42, -0.42, -1.04),
+  ], 0.024);
+
+  addPipe([
+    new THREE.Vector3(0.0, 0.04, -1.18),
+    new THREE.Vector3(0.42, -0.42, -1.04),
+  ], 0.024);
+
+  // 7. Machined Structural Stanchions & Hull Hardpoint Mounts
+  const mountPts = [
+    [-0.56, 0.10, 0.70], [-0.56, 0.10, -0.70],
+    [0.56, 0.10, 0.70],  [0.56, 0.10, -0.70],
+    [-0.52, SH + 0.04, 0.25], [-0.52, SH + 0.04, -0.25],
+    [0.52, SH + 0.04, 0.25],  [0.52, SH + 0.04, -0.25],
+    // Side hardpoint standoff mounts
+    [-SW - 0.01, 0.00, 0.00], [SW + 0.01, 0.00, 0.00],
+    [-(SW * 0.94 + 0.01), 0.28, 0.35], [(SW * 0.94 + 0.01), 0.28, 0.35],
+    [-(SW * 0.94 + 0.01), 0.28, -0.35], [(SW * 0.94 + 0.01), 0.28, -0.35],
+    // Front above-door & Rear hardpoint standoff mounts
+    [0.0, 0.58, 0.84], [-0.30, 0.36, 0.98], [0.30, 0.36, 0.98],
+    [0.0, 0.04, -1.10], [-0.30, 0.30, -0.98], [0.30, 0.30, -0.98],
+    [-0.30, -0.26, -1.02], [0.30, -0.26, -1.02]
+  ];
+
+  mountPts.forEach(([mx, my, mz]) => {
+    // Mounting standoff cylinder
+    const stanchion = mesh(new THREE.CylinderGeometry(0.024, 0.030, 0.08, 12), jointMat);
+    stanchion.position.set(mx, my, mz);
+    cg.add(stanchion); exteriorMeshes.push(stanchion);
+
+    // Bolted mounting flange pad
+    const pad = mesh(new THREE.BoxGeometry(0.075, 0.016, 0.075), jointMat);
+    pad.position.set(mx, my - 0.035, mz);
+    cg.add(pad); exteriorMeshes.push(pad);
+
+    // Stainless corner bolt details on pad
+    for (const [bx, bz] of [[0.025, 0.025], [-0.025, 0.025], [0.025, -0.025], [-0.025, -0.025]]) {
+      const b = mesh(new THREE.CylinderGeometry(0.005, 0.005, 0.014, 6), silverMat);
+      b.position.set(mx + bx, my - 0.028, mz + bz);
+      cg.add(b); exteriorMeshes.push(b);
+    }
+  });
+
+  // 7. Four Heavy Stainless Steel Crane / Helicopter Hoist Rings (Pad-Eyes) on Top Rails
+  const shacklePositions = [
+    [-0.48, SH + 0.21, 0.22],
+    [-0.48, SH + 0.21, -0.22],
+    [0.48, SH + 0.21, 0.22],
+    [0.48, SH + 0.21, -0.22],
+  ];
+  shacklePositions.forEach(([sx, sy, sz]) => {
+    const shackleBase = mesh(new THREE.BoxGeometry(0.048, 0.028, 0.04), jointMat);
+    shackleBase.position.set(sx, sy, sz);
+    cg.add(shackleBase); exteriorMeshes.push(shackleBase);
+
+    const shackleRing = mesh(new THREE.TorusGeometry(0.038, 0.009, 8, 24), silverMat);
+    shackleRing.position.set(sx, sy + 0.038, sz);
+    shackleRing.rotation.y = Math.PI / 2;
+    cg.add(shackleRing); exteriorMeshes.push(shackleRing);
+  });
+}
+
+// ════════════════════════════════════════════
+//  INTERIOR BUILD (full cutaway)
+// ════════════════════════════════════════════
+function buildInterior() {
+  const g = interiorGroup;
+
+  // Common Materials
+  const foamYellowMat = mat(0xD4A034, 0.88, 0.02); // #4 Yellow EPP thermal insulation foam
+  const foamBlueMat   = mat(0x1976D2, 0.82, 0.05); // #3 Blue impact/flotation foam
+  const frameRingMat  = mat(0x404552, 0.38, 0.80); // #2 Structural frame ring alloy
+  const deckMat       = mat(0x8A92A0, 0.45, 0.60); // Upper seat deck plate
+  const subDeckMat    = mat(0x353B46, 0.65, 0.40); // Lower sub-floor deck plate
+  const stanchionMat  = mat(0x606876, 0.32, 0.82); // Support columns
+  const darkAlloyMat  = mat(0x22262E, 0.50, 0.70); // Brackets & housings
+
+  // ── 1. INNER SHELL WALLS & REAR BULKHEAD ──
+  // Curved rear & side cabin wall
+  const innerShellGeo = new THREE.SphereGeometry(0.88, 64, 44, 0, Math.PI * 2, 0, Math.PI);
+  const innerShellMat = new THREE.MeshStandardMaterial({
+    color: 0xDCE0E8,
+    roughness: 0.68,
+    metalness: 0.08,
+    side: THREE.BackSide
+  });
+  const innerShell = new THREE.Mesh(innerShellGeo, innerShellMat);
+  innerShell.scale.set(SW * 0.96, SH * 0.96, SW * 0.96);
+  g.add(innerShell);
+
+  // Rear interior partition bulkhead — contoured ellipse that matches the capsule cross-section at z = -0.42
+  const z0_rear = -0.42;
+  const k_rear = Math.sqrt(Math.max(0, 1 - (z0_rear / SW) ** 2));
+  const a_rear = 0.88 * SW * k_rear; // semi-axis X
+  const b_rear = 0.88 * SH * k_rear; // semi-axis Y
+
+  const rearShape = new THREE.Shape();
+  const N_rear = 64;
+  for (let i = 0; i <= N_rear; i++) {
+    const t = (i / N_rear) * Math.PI * 2;
+    const x = Math.cos(t) * a_rear;
+    const y = Math.sin(t) * b_rear;
+    if (i === 0) rearShape.moveTo(x, y);
+    else rearShape.lineTo(x, y);
+  }
+
+  const rearWallGeo = new THREE.ExtrudeGeometry(rearShape, {
+    depth: 0.024,
+    bevelEnabled: false
+  });
+  const rearWall = mesh(rearWallGeo, mat(0xCFD5DF, 0.6, 0.15));
+  rearWall.position.set(0, 0, z0_rear);
+  g.add(rearWall);
+
+  // Vertical bulkhead structural stiffeners (height dynamically fitted inside ellipse)
+  for (const rx of [-0.48, -0.24, 0.0, 0.24, 0.48]) {
+    const maxH = 2 * b_rear * Math.sqrt(Math.max(0, 1 - (rx / a_rear) ** 2)) * 0.92;
+    if (maxH > 0.1) {
+      const vRib = mesh(new THREE.BoxGeometry(0.020, maxH, 0.012), mat(0x9EA8B6, 0.45, 0.4));
+      vRib.position.set(rx, 0.0, z0_rear + 0.025);
+      g.add(vRib);
+    }
+  }
+
+  // ── 2. & 3. CURVED CONTOURED FOAM BLOCKS (#3 BLUE FLOTATION & #4 YELLOW EPP INSULATION) ──
+  // These mathematically follow the pod's ellipsoid contour (SW, SH) and stay strictly inside the hull.
+  function makeCurvedFoamSegment(signX, theta1, theta2, rIn, rOut, zFront, zBack, material) {
+    const shape = new THREE.Shape();
+    const N = 32;
+
+    // Outer elliptical arc: from theta1 to theta2
+    for (let i = 0; i <= N; i++) {
+      const t = theta1 + (theta2 - theta1) * (i / N);
+      const x = signX * Math.cos(t) * SW * rOut;
+      const y = Math.sin(t) * SH * rOut;
+      if (i === 0) shape.moveTo(x, y);
+      else shape.lineTo(x, y);
+    }
+
+    // Inner elliptical arc: from theta2 back to theta1
+    for (let i = N; i >= 0; i--) {
+      const t = theta1 + (theta2 - theta1) * (i / N);
+      const x = signX * Math.cos(t) * SW * rIn;
+      const y = Math.sin(t) * SH * rIn;
+      shape.lineTo(x, y);
+    }
+    shape.closePath();
+
+    const depth = Math.abs(zFront - zBack);
+    const geom = new THREE.ExtrudeGeometry(shape, {
+      depth: depth,
+      bevelEnabled: false,
+      steps: 1
+    });
+
+    const m = mesh(geom, material);
+    m.position.z = zBack;
+    g.add(m);
+    return m;
+  }
+
+  function makeCeilingFoamSegment(theta1, theta2, rIn, rOut, zFront, zBack, material) {
+    const shape = new THREE.Shape();
+    const N = 36;
+    for (let i = 0; i <= N; i++) {
+      const t = theta1 + (theta2 - theta1) * (i / N);
+      const x = Math.cos(t) * SW * rOut;
+      const y = Math.sin(t) * SH * rOut;
+      if (i === 0) shape.moveTo(x, y);
+      else shape.lineTo(x, y);
+    }
+    for (let i = N; i >= 0; i--) {
+      const t = theta1 + (theta2 - theta1) * (i / N);
+      const x = Math.cos(t) * SW * rIn;
+      const y = Math.sin(t) * SH * rIn;
+      shape.lineTo(x, y);
+    }
+    shape.closePath();
+
+    const depth = Math.abs(zFront - zBack);
+    const geom = new THREE.ExtrudeGeometry(shape, {
+      depth: depth,
+      bevelEnabled: false,
+      steps: 1
+    });
+
+    const m = mesh(geom, material);
+    m.position.z = zBack;
+    g.add(m);
+    return m;
+  }
+
+  // #3 BLUE IMPACT / BUOYANCY FOAM SIDE INSERTS (Left & Right curved crescent blocks)
+  // Perfectly contoured to the side hull wall from y ≈ -0.05 up to y ≈ +0.40
+  makeCurvedFoamSegment(-1, -0.06, 0.52, 0.82, 0.93, 0.038, -0.28, foamBlueMat); // Left Blue Foam
+  makeCurvedFoamSegment( 1, -0.06, 0.52, 0.82, 0.93, 0.038, -0.28, foamBlueMat); // Right Blue Foam
+
+  // #4 YELLOW EPP THERMAL FOAM INSULATION (Lower Left & Lower Right curved wall pads)
+  // Contoured to lower hull from y ≈ -0.73 up to y ≈ -0.06, directly beneath blue blocks
+  makeCurvedFoamSegment(-1, -1.15, -0.08, 0.83, 0.93, 0.038, -0.28, foamYellowMat); // Left Lower Yellow Foam
+  makeCurvedFoamSegment( 1, -1.15, -0.08, 0.83, 0.93, 0.038, -0.28, foamYellowMat); // Right Lower Yellow Foam
+
+  // #4 YELLOW EPP CEILING INSULATION (Top arched ceiling pad)
+  // Running overhead from top of right blue block to top of left blue block
+  makeCeilingFoamSegment(0.55, Math.PI - 0.55, 0.83, 0.92, 0.038, -0.28, foamYellowMat);
+
+  // #4 YELLOW EPP BILGE INSULATION (Bottom cradle lining keel around acoustic pinger)
+  makeCeilingFoamSegment(-Math.PI + 1.15, -1.15, 0.82, 0.92, 0.038, -0.28, foamYellowMat);
+
+  // ── 4. #2 STRUCTURAL INNER FRAME RING & BULKHEAD RIBS ──
+  // Elliptical structural frame ring that matches the pod's exact (SW, SH) cross-section
+  const frameCurve = new THREE.EllipseCurve(0, 0, SW * 0.925, SH * 0.925, 0, Math.PI * 2, false, 0);
+  const framePts = frameCurve.getPoints(72).map(p => new THREE.Vector3(p.x, p.y, 0.04));
+  const frameSpline = new THREE.CatmullRomCurve3(framePts, true);
+  const mainFrameRing = mesh(new THREE.TubeGeometry(frameSpline, 72, 0.016, 10, true), frameRingMat);
+  g.add(mainFrameRing);
+
+  // Lower rim structural mounting plates & brackets (#2 in diagram)
+  for (const sign of [-1, 1]) {
+    const rimMount = mesh(new THREE.BoxGeometry(0.08, 0.05, 0.06), frameRingMat);
+    rimMount.position.set(sign * 0.78, -0.56, 0.02);
+    rimMount.rotation.z = sign * 0.42;
+    g.add(rimMount);
+
+    const rimBolt = mesh(new THREE.CylinderGeometry(0.008, 0.008, 0.02, 6), mat(0xCCCCCC, 0.2, 0.9));
+    rimBolt.rotation.x = Math.PI / 2;
+    rimBolt.position.set(sign * 0.78, -0.56, 0.045);
+    g.add(rimBolt);
+  }
+
+  // ── 5. DUAL-LEVEL FLOOR ARCHITECTURE ──
+  // UPPER SEAT DECK (main horizontal platform supporting seats & O2 cylinder)
+  const upperDeck = mesh(new THREE.BoxGeometry(1.48, 0.038, 0.54), deckMat);
+  upperDeck.position.set(-0.06, -0.16, -0.10);
+  g.add(upperDeck);
+
+  // Deck front extruded lip (silver finish)
+  const deckLip = mesh(new THREE.BoxGeometry(1.50, 0.020, 0.024), mat(0xCCD2DE, 0.25, 0.8));
+  deckLip.position.set(-0.06, -0.16, 0.17);
+  g.add(deckLip);
+
+  // Recessed First Aid step shelf on the right side under occupant 3
+  const faStepShelf = mesh(new THREE.BoxGeometry(0.28, 0.032, 0.32), deckMat);
+  faStepShelf.position.set(0.48, -0.23, 0.02);
+  g.add(faStepShelf);
+
+  const faStepWall = mesh(new THREE.BoxGeometry(0.022, 0.07, 0.32), deckMat);
+  faStepWall.position.set(0.34, -0.195, 0.02);
+  g.add(faStepWall);
+
+  // LOWER DECK (Sub-floor deck supporting water canisters, rations, pelican case)
+  const lowerDeck = mesh(new THREE.BoxGeometry(1.30, 0.034, 0.50), subDeckMat);
+  lowerDeck.position.set(0.0, -0.54, -0.10);
+  g.add(lowerDeck);
+
+  const lowerDeckFrontLip = mesh(new THREE.BoxGeometry(1.32, 0.018, 0.02), mat(0x282C34, 0.4, 0.8));
+  lowerDeckFrontLip.position.set(0.0, -0.54, 0.15);
+  g.add(lowerDeckFrontLip);
+
+  // Sturdy vertical stanchions connecting upper seat deck to lower storage deck
+  const stanchionPositions = [
+    [-0.58, -0.35, 0.12],
+    [0.18, -0.35, 0.12],
+    [0.62, -0.38, 0.12],
+    [-0.58, -0.35, -0.32],
+    [0.62, -0.38, -0.32]
+  ];
+  stanchionPositions.forEach(([sx, sy, sz]) => {
+    const col = mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.36, 12), stanchionMat);
+    col.position.set(sx, sy, sz);
+    g.add(col);
+  });
+
+  // ── 6. 3 SEATS WITH OCCUPANT SILHOUETTES & 5-POINT HARNESSES ──
+  const seatShellMat  = mat(0x22262E, 0.72, 0.15); // Dark matte graphite bucket seat
+  const seatCushionMat = mat(0x181A1F, 0.85, 0.05); // High-density foam cushions
+  const occupantMat   = mat(0xCBD5E1, 0.55, 0.10, { transparent: true, opacity: 0.92 }); // Clean light grey silhouette
+  const harnessWebMat = mat(0x111111, 0.85, 0.10); // Heavy black woven webbing
+  const buckleRedMat  = mat(0xDC2626, 0.35, 0.30); // Vibrant red emergency release buckle
+
+  function buildSeatAndOccupant(xPos) {
+    const sg = new THREE.Group();
+
+    // Bucket Seatback with headrest and side bolster wings
+    const seatback = mesh(new THREE.BoxGeometry(0.24, 0.46, 0.05), seatShellMat);
+    seatback.position.set(0, 0.22, -0.18);
+    sg.add(seatback);
+
+    // Lateral support wings
+    for (const bx of [-0.12, 0.12]) {
+      const wing = mesh(new THREE.BoxGeometry(0.025, 0.38, 0.10), seatShellMat);
+      wing.position.set(bx, 0.20, -0.14);
+      sg.add(wing);
+    }
+
+    // Integrated headrest
+    const headrest = mesh(new THREE.BoxGeometry(0.18, 0.14, 0.07), seatCushionMat);
+    headrest.position.set(0, 0.48, -0.17);
+    sg.add(headrest);
+
+    // Seat bottom cushion
+    const cushion = mesh(new THREE.BoxGeometry(0.24, 0.05, 0.28), seatCushionMat);
+    cushion.position.set(0, 0.01, -0.04);
+    sg.add(cushion);
+
+    // Thigh bolsters
+    for (const tx of [-0.11, 0.11]) {
+      const tbolster = mesh(new THREE.BoxGeometry(0.025, 0.045, 0.26), seatShellMat);
+      tbolster.position.set(tx, 0.04, -0.04);
+      sg.add(tbolster);
+    }
+
+    // Occupant Silhouette (Translucent sleek grey matching diagram)
+    // Torso / body
+    const torso = mesh(new THREE.BoxGeometry(0.18, 0.34, 0.12), occupantMat);
+    torso.position.set(0, 0.20, -0.09);
+    sg.add(torso);
+
+    // Shoulders
+    const shoulders = mesh(new THREE.CylinderGeometry(0.075, 0.09, 0.24, 12), occupantMat);
+    shoulders.rotation.z = Math.PI / 2;
+    shoulders.position.set(0, 0.34, -0.09);
+    sg.add(shoulders);
+
+    // Neck & Head silhouette with smooth rounded helmet profile
+    const head = mesh(new THREE.SphereGeometry(0.074, 20, 20), occupantMat);
+    head.scale.set(0.92, 1.15, 0.95);
+    head.position.set(0, 0.46, -0.09);
+    sg.add(head);
+
+    // Thighs / Legs extending forward
+    const legs = mesh(new THREE.BoxGeometry(0.17, 0.08, 0.22), occupantMat);
+    legs.position.set(0, 0.05, 0.06);
+    sg.add(legs);
+
+    // 5-Point Safety Harness:
+    // Left shoulder strap
+    const strapL = mesh(new THREE.BoxGeometry(0.032, 0.30, 0.014), harnessWebMat);
+    strapL.position.set(-0.052, 0.21, -0.02);
+    sg.add(strapL);
+
+    // Right shoulder strap
+    const strapR = mesh(new THREE.BoxGeometry(0.032, 0.30, 0.014), harnessWebMat);
+    strapR.position.set(0.052, 0.21, -0.02);
+    sg.add(strapR);
+
+    // Horizontal lap belt
+    const lapBelt = mesh(new THREE.BoxGeometry(0.22, 0.032, 0.016), harnessWebMat);
+    lapBelt.position.set(0, 0.08, 0.0);
+    sg.add(lapBelt);
+
+    // Central circular / rectangular quick-release buckle (Red + Black)
+    const buckleBase = mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.020, 16), mat(0x1A1A1A, 0.4, 0.8));
+    buckleBase.rotation.x = Math.PI / 2;
+    buckleBase.position.set(0, 0.08, 0.015);
+    sg.add(buckleBase);
+
+    const buckleBtn = mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.024, 14), buckleRedMat);
+    buckleBtn.rotation.x = Math.PI / 2;
+    buckleBtn.position.set(0, 0.08, 0.020);
+    sg.add(buckleBtn);
+
+    sg.position.set(xPos, -0.14, 0.0);
+    return sg;
+  }
+
+  // Position 3 seats side-by-side
+  g.add(buildSeatAndOccupant(-0.28)); // Left Seat (Occupant 1)
+  g.add(buildSeatAndOccupant(0.0));   // Center Seat (Occupant 2)
+  g.add(buildSeatAndOccupant(0.28));  // Right Seat (Occupant 3)
+
+  // ── 7. #5 LARGE BLUE COMPRESSED O₂ CYLINDER (LEFT) ──
+  const o2Group = new THREE.Group();
+  const o2CylMat = mat(0x0288D1, 0.22, 0.35); // Vibrant blue oxygen tank
+  const o2MetalMat = mat(0xD0D6E2, 0.25, 0.90); // Polished chrome / stainless hardware
+  const o2BrassMat = mat(0xC8963E, 0.30, 0.75); // Brass valve & gauge bezels
+
+  // Main Cylinder Body
+  const o2Body = mesh(new THREE.CylinderGeometry(0.095, 0.095, 0.58, 24), o2CylMat);
+  o2Body.position.set(0, 0.29, 0);
+  o2Group.add(o2Body);
+
+  // Rounded Hemisphere Top & Bottom Dome
+  const o2TopDome = mesh(new THREE.SphereGeometry(0.095, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), o2CylMat);
+  o2TopDome.position.set(0, 0.58, 0);
+  o2Group.add(o2TopDome);
+
+  const o2BotDome = mesh(new THREE.SphereGeometry(0.095, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2), o2CylMat);
+  o2BotDome.rotation.x = Math.PI;
+  o2BotDome.position.set(0, 0.0, 0);
+  o2Group.add(o2BotDome);
+
+  // Chrome Bottom Foot Collar with mounting holes
+  const o2Foot = mesh(new THREE.CylinderGeometry(0.102, 0.105, 0.065, 24), o2MetalMat);
+  o2Foot.position.set(0, 0.015, 0);
+  o2Group.add(o2Foot);
+
+  // High-Pressure Valve Neck & Manifold on Top
+  const o2Neck = mesh(new THREE.CylinderGeometry(0.026, 0.026, 0.065, 12), o2MetalMat);
+  o2Neck.position.set(0, 0.69, 0);
+  o2Group.add(o2Neck);
+
+  // Brass Main Shutoff Handwheel
+  const o2Wheel = mesh(new THREE.TorusGeometry(0.032, 0.008, 8, 20), o2BrassMat);
+  o2Wheel.position.set(0, 0.73, 0);
+  o2Group.add(o2Wheel);
+
+  // Dual Pressure Gauges
+  for (const gx of [-0.035, 0.035]) {
+    const gauge = mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.014, 12), o2BrassMat);
+    gauge.rotation.x = Math.PI / 2;
+    gauge.position.set(gx, 0.69, 0.028);
+    o2Group.add(gauge);
+
+    const gaugeFace = mesh(new THREE.CircleGeometry(0.013, 12), mat(0xFFFFFF, 0.3, 0));
+    gaugeFace.position.set(gx, 0.69, 0.036);
+    o2Group.add(gaugeFace);
+  }
+
+  // Stainless Steel Wall Retaining Bracket Collar
+  const o2Bracket = mesh(new THREE.TorusGeometry(0.099, 0.012, 8, 24, Math.PI * 1.2), o2MetalMat);
+  o2Bracket.rotation.x = Math.PI / 2;
+  o2Bracket.position.set(0, 0.42, 0);
+  o2Group.add(o2Bracket);
+
+  o2Group.position.set(-0.62, -0.14, -0.06);
+  g.add(o2Group);
+
+  // ── 8. #6 SILVER/WHITE CO₂ SCRUBBER CANISTER (RIGHT) ──
+  const co2Group = new THREE.Group();
+  const co2BodyMat = mat(0xE0E4EC, 0.26, 0.65); // Satin silver-white canister
+  const co2RingMat = mat(0x6A7282, 0.35, 0.80); // Gunmetal clamp bands
+
+  // Main CO2 Scrubber Body
+  const co2Body = mesh(new THREE.CylinderGeometry(0.078, 0.078, 0.52, 24), co2BodyMat);
+  co2Body.position.set(0, 0.26, 0);
+  co2Group.add(co2Body);
+
+  // Domed Top & Bottom
+  const co2Top = mesh(new THREE.SphereGeometry(0.078, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), co2BodyMat);
+  co2Top.position.set(0, 0.52, 0);
+  co2Group.add(co2Top);
+
+  const co2Bot = mesh(new THREE.SphereGeometry(0.078, 16, 8, 0, Math.PI * 2, 0, Math.PI / 2), co2BodyMat);
+  co2Bot.rotation.x = Math.PI;
+  co2Bot.position.set(0, 0.0, 0);
+  co2Group.add(co2Bot);
+
+  // Top digital monitoring unit & sensor head
+  const co2Head = mesh(new THREE.CylinderGeometry(0.052, 0.052, 0.07, 16), o2MetalMat);
+  co2Head.position.set(0, 0.62, 0);
+  co2Group.add(co2Head);
+
+  // Bottom pedestal stand
+  const co2Stand = mesh(new THREE.CylinderGeometry(0.082, 0.088, 0.06, 16), o2MetalMat);
+  co2Stand.position.set(0, 0.02, 0);
+  co2Group.add(co2Stand);
+
+  // Two mounting clamp bands
+  for (const cy of [0.18, 0.40]) {
+    const band = mesh(new THREE.TorusGeometry(0.082, 0.009, 8, 24), co2RingMat);
+    band.rotation.x = Math.PI / 2;
+    band.position.set(0, cy, 0);
+    co2Group.add(band);
+  }
+
+  // Slim auxiliary silver bottle mounted behind scrubber (visible in diagram)
+  const auxBottle = mesh(new THREE.CylinderGeometry(0.028, 0.028, 0.44, 14), o2MetalMat);
+  auxBottle.position.set(-0.06, 0.24, -0.07);
+  co2Group.add(auxBottle);
+
+  co2Group.position.set(0.64, -0.14, -0.06);
+  g.add(co2Group);
+
+  // ── 9. SUB-FLOOR STORAGE BAY (UNDER-SEAT EQUIPMENT) ──
+
+  // Leftmost: Dark Cylindrical Bilge Pump / Aux Unit
+  const pumpGroup = new THREE.Group();
+  const pumpBody = mesh(new THREE.CylinderGeometry(0.055, 0.058, 0.24, 18), mat(0x2B2F38, 0.5, 0.6));
+  pumpBody.position.set(0, 0.12, 0);
+  pumpGroup.add(pumpBody);
+
+  const pumpCap = mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.035, 14), mat(0x4F5666, 0.4, 0.7));
+  pumpCap.position.set(0, 0.25, 0);
+  pumpGroup.add(pumpCap);
+
+  // Tiny status LED on pump
+  const pumpLed = mesh(new THREE.CircleGeometry(0.008, 10), new THREE.MeshStandardMaterial({ color: 0x22C55E, emissive: 0x22C55E, emissiveIntensity: 2 }));
+  pumpLed.position.set(0, 0.18, 0.06);
+  pumpGroup.add(pumpLed);
+
+  pumpGroup.position.set(-0.55, -0.52, -0.06);
+  g.add(pumpGroup);
+
+  // #7 BLUE WATER CANISTERS (3 rectangular jugs with handles and white caps)
+  const waterCanMat = mat(0x1976D2, 0.45, 0.12); // Deep potable water blue
+  const waterCapMat = mat(0xF8FAFC, 0.35, 0.10); // White filler cap
+  for (let i = 0; i < 3; i++) {
+    const wx = -0.38 + i * 0.12;
+    const wcan = new THREE.Group();
+
+    // Rectangular body
+    const wbody = mesh(new THREE.BoxGeometry(0.10, 0.24, 0.14), waterCanMat);
+    wbody.position.set(0, 0.12, 0);
+    wcan.add(wbody);
+
+    // Top molded handle
+    const whandle = mesh(new THREE.BoxGeometry(0.06, 0.035, 0.024), waterCanMat);
+    whandle.position.set(0, 0.25, 0);
+    wcan.add(whandle);
+
+    // White screw cap
+    const wcap = mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.018, 12), waterCapMat);
+    wcap.position.set(0.028, 0.25, 0.03);
+    wcan.add(wcap);
+
+    wcan.position.set(wx, -0.52, -0.04);
+    g.add(wcan);
+  }
+
+  // #8 ORANGE EMERGENCY FOOD RATION PACKS (Foil pouches neatly stacked)
+  const rationPackMat = mat(0xF97316, 0.55, 0.08); // Safety orange ration pouches
+  const rationGroup = new THREE.Group();
+
+  // 2 Back Standing Pouches
+  for (const rx of [-0.06, 0.06]) {
+    const rpack = mesh(new THREE.BoxGeometry(0.105, 0.20, 0.055), rationPackMat);
+    rpack.position.set(rx, 0.10, -0.04);
+    rationGroup.add(rpack);
+
+    // Foil seal crimp top
+    const crimp = mesh(new THREE.BoxGeometry(0.108, 0.018, 0.012), mat(0xEA580C, 0.4, 0.3));
+    crimp.position.set(rx, 0.205, -0.04);
+    rationGroup.add(crimp);
+  }
+
+  // 2 Front Smaller Stacked Pouches
+  for (const rx of [-0.06, 0.06]) {
+    const rpackFront = mesh(new THREE.BoxGeometry(0.105, 0.11, 0.055), rationPackMat);
+    rpackFront.position.set(rx, 0.055, 0.035);
+    rationGroup.add(rpackFront);
+  }
+
+  rationGroup.position.set(0.07, -0.52, -0.04);
+  g.add(rationGroup);
+
+  // #12 RUGGED BLACK PELICAN EQUIPMENT CASE (Under right seat)
+  const pelicanGroup = new THREE.Group();
+  const pelicanBodyMat = mat(0x1E222A, 0.78, 0.15); // Impact copolymer black
+  const pelicanLatchMat = mat(0xD1D5DB, 0.25, 0.85); // Silver throw latches
+
+  // Case Main Shell
+  const pcase = mesh(new THREE.BoxGeometry(0.32, 0.23, 0.22), pelicanBodyMat);
+  pcase.position.set(0, 0.115, 0);
+  pelicanGroup.add(pcase);
+
+  // Structural Reinforcement Ribs on Top and Front
+  for (const ry of [0.06, 0.12, 0.18]) {
+    const rib = mesh(new THREE.BoxGeometry(0.324, 0.014, 0.224), mat(0x14171E, 0.8, 0.1));
+    rib.position.set(0, ry, 0);
+    pelicanGroup.add(rib);
+  }
+
+  // Front Heavy Throw-Latches (silver)
+  for (const lx of [-0.08, 0.08]) {
+    const latch = mesh(new THREE.BoxGeometry(0.024, 0.045, 0.015), pelicanLatchMat);
+    latch.position.set(lx, 0.13, 0.115);
+    pelicanGroup.add(latch);
+  }
+
+  // Folding Front Carry Handle
+  const phandle = mesh(new THREE.BoxGeometry(0.12, 0.026, 0.032), mat(0x111317, 0.6, 0.2));
+  phandle.position.set(0, 0.10, 0.125);
+  pelicanGroup.add(phandle);
+
+  pelicanGroup.position.set(0.42, -0.52, -0.04);
+  g.add(pelicanGroup);
+
+  // RED FIRST AID KIT (With Bold White Medical Cross, on step shelf under right seat)
+  const faGroup = new THREE.Group();
+  const faRedMat = mat(0xDC2626, 0.42, 0.08); // Emergency medical red
+  const faWhiteMat = mat(0xFFFFFF, 0.35, 0.02); // Clean white cross
+
+  const faBox = mesh(new THREE.BoxGeometry(0.18, 0.13, 0.14), faRedMat);
+  faBox.position.set(0, 0.065, 0);
+  faGroup.add(faBox);
+
+  // White Cross on Front Face
+  const crossH = mesh(new THREE.BoxGeometry(0.075, 0.024, 0.008), faWhiteMat);
+  crossH.position.set(0, 0.065, 0.074);
+  faGroup.add(crossH);
+
+  const crossV = mesh(new THREE.BoxGeometry(0.024, 0.075, 0.008), faWhiteMat);
+  crossV.position.set(0, 0.065, 0.074);
+  faGroup.add(crossV);
+
+  // First aid top handle
+  const faHandle = mesh(new THREE.TorusGeometry(0.024, 0.006, 6, 16, Math.PI), mat(0x111111, 0.5, 0.5));
+  faHandle.position.set(0, 0.13, 0);
+  faGroup.add(faHandle);
+
+  faGroup.position.set(0.48, -0.21, 0.02);
+  g.add(faGroup);
+
+  // ── 10. #10 ACOUSTIC PINGER (KEEL / BOTTOM BILGE) ──
+  const pingerGroup = new THREE.Group();
+  const pingerBodyMat = mat(0x181B20, 0.48, 0.72); // Black anodized casing
+  const pingerLensMat = new THREE.MeshStandardMaterial({
+    color: 0x0D9488,
+    emissive: new THREE.Color(0x0F766E),
+    emissiveIntensity: 0.6,
+    roughness: 0.25,
+    metalness: 0.4
+  });
+
+  // Main Transponder Cylinder
+  const pingerBody = mesh(new THREE.CylinderGeometry(0.048, 0.048, 0.09, 20), pingerBodyMat);
+  pingerBody.rotation.x = Math.PI / 2;
+  pingerGroup.add(pingerBody);
+
+  // Heavy Keel Mounting Bracket
+  const pingerBracket = mesh(new THREE.BoxGeometry(0.14, 0.06, 0.05), darkAlloyMat);
+  pingerBracket.position.set(0, 0.025, -0.02);
+  pingerGroup.add(pingerBracket);
+
+  // Circular Acoustic Transducer Lens (Greenish-teal circular aperture)
+  const pingerLens = mesh(new THREE.CircleGeometry(0.038, 24), pingerLensMat);
+  pingerLens.position.set(0, 0, 0.048);
+  pingerGroup.add(pingerLens);
+
+  // Concentric Emitter Ring Detail
+  const pingerRing = mesh(new THREE.TorusGeometry(0.022, 0.004, 8, 20), mat(0x14B8A6, 0.2, 0.8));
+  pingerRing.position.set(0, 0, 0.050);
+  pingerGroup.add(pingerRing);
+
+  // Yellow Insulated Signal Wire Harness going to frame
+  const wireCurve = new THREE.CatmullRomCurve3([
+    new THREE.Vector3(0.04, 0.02, 0.02),
+    new THREE.Vector3(0.12, 0.06, 0.01),
+    new THREE.Vector3(0.24, 0.08, 0.00)
+  ]);
+  const wireGeo = new THREE.TubeGeometry(wireCurve, 16, 0.004, 6, false);
+  const pingerWire = mesh(wireGeo, mat(0xEAB308, 0.6, 0.1));
+  pingerGroup.add(pingerWire);
+
+  pingerGroup.position.set(0.0, -0.66, -0.06);
+  g.add(pingerGroup);
+
+  // ── 11. CEILING ARCH & OVERHEAD LED LIGHT FIXTURES ──
+  // Recessed Overhead Console Box
+  const consoleBox = mesh(new THREE.BoxGeometry(0.86, 0.09, 0.34), mat(0xCFD5E1, 0.6, 0.2));
+  consoleBox.position.set(0, 0.54, -0.16);
+  g.add(consoleBox);
+
+  // 3 Angled Recessed Warm-White LED Light Panels (Left, Center, Right)
+  const ledLensMat = new THREE.MeshStandardMaterial({
+    color: 0xFFFFF0,
+    emissive: new THREE.Color(0xFFFBEB),
+    emissiveIntensity: 2.8,
+    roughness: 0.12
+  });
+
+  const ceilingLightPositions = [-0.28, 0.0, 0.28];
+  ceilingLightPositions.forEach(lx => {
+    // Bevel frame
+    const lightFrame = mesh(new THREE.BoxGeometry(0.18, 0.022, 0.085), mat(0x94A3B8, 0.3, 0.6));
+    lightFrame.position.set(lx, 0.49, -0.15);
+    lightFrame.rotation.x = 0.18;
+    g.add(lightFrame);
+
+    // Glowing LED diffuser lens
+    const lightLens = mesh(new THREE.PlaneGeometry(0.16, 0.065), ledLensMat);
+    lightLens.position.set(lx, 0.485, -0.15);
+    lightLens.rotation.x = Math.PI / 2 + 0.18;
+    g.add(lightLens);
+  });
+
+  // Top Roof Hatch Locking Mechanism (Below #9 GNSS Beacon)
+  const topHatchLock = mesh(new THREE.CylinderGeometry(0.18, 0.21, 0.045, 24), darkAlloyMat);
+  topHatchLock.position.set(0, 0.62, -0.16);
+  g.add(topHatchLock);
+
+  // Hatch locking cross-dogs (orange levers)
+  for (const ang of [0, Math.PI / 2]) {
+    const dog = mesh(new THREE.BoxGeometry(0.36, 0.022, 0.032), mat(ORANGE, 0.28, 0.4));
+    dog.position.set(0, 0.64, -0.16);
+    dog.rotation.y = ang;
+    g.add(dog);
+  }
+
+  // ── 12. FRONT CUTAWAY CROSS-SECTION MATERIAL LAYERS (at z = 0.045) ──
+  // Elliptical outer shell cut face ring matching the orange hull contour (SW, SH)
+  const shellCutShape = new THREE.Shape();
+  const N_cut = 72;
+  for (let i = 0; i <= N_cut; i++) {
+    const t = (i / N_cut) * Math.PI * 2;
+    const x = Math.cos(t) * SW * 1.00;
+    const y = Math.sin(t) * SH * 1.00;
+    if (i === 0) shellCutShape.moveTo(x, y);
+    else shellCutShape.lineTo(x, y);
+  }
+  const shellCutHole = new THREE.Path();
+  for (let i = 0; i <= N_cut; i++) {
+    const t = (i / N_cut) * Math.PI * 2;
+    const x = Math.cos(t) * SW * 0.93;
+    const y = Math.sin(t) * SH * 0.93;
+    if (i === 0) shellCutHole.moveTo(x, y);
+    else shellCutHole.lineTo(x, y);
+  }
+  shellCutShape.holes.push(shellCutHole);
+  const shellCutMesh = mesh(new THREE.ShapeGeometry(shellCutShape), new THREE.MeshStandardMaterial({
+    color: ORANGE,
+    roughness: 0.35,
+    metalness: 0.08,
+    side: THREE.DoubleSide
+  }));
+  shellCutMesh.position.set(0, 0, 0.042);
+  g.add(shellCutMesh);
+
+  // ── 13. INTERIOR CABIN ILLUMINATION ──
+  // Warm ambient glow cast downward from the 3 overhead lights
+  const cabinLight1 = new THREE.PointLight(0xFFFBEB, 2.2, 2.8);
+  cabinLight1.position.set(0, 0.44, -0.10);
+  g.add(cabinLight1);
+
+  const cabinFillLight = new THREE.PointLight(0x93C5FD, 0.8, 3.2);
+  cabinFillLight.position.set(0, 0.0, 0.15);
+  g.add(cabinFillLight);
+
+  podGroup.add(g);
+  g.visible = false;
+}
+
+// ════════════════════════════════════════════
+//  LIGHTS
+// ════════════════════════════════════════════
+const lightPresets = [
+  () => {
+    const a = new THREE.AmbientLight(0xffffff, 0.42);
+    const k = new THREE.DirectionalLight(0xffffff, 2.8); k.position.set(5,8,6); k.castShadow=true; k.shadow.mapSize.setScalar(2048);
+    const f = new THREE.DirectionalLight(0x4488ff, 0.85); f.position.set(-5,3,-4);
+    const r = new THREE.DirectionalLight(0xE86800, 0.55); r.position.set(1,-3,-5);
+    return [a,k,f,r];
+  },
+  () => {
+    const a = new THREE.AmbientLight(0xd0e8ff, 0.5);
+    const k = new THREE.DirectionalLight(0x88ccff, 3.2); k.position.set(-5,8,5); k.castShadow=true; k.shadow.mapSize.setScalar(2048);
+    const f = new THREE.DirectionalLight(0x4466ff, 1.1); f.position.set(5,2,-5);
+    return [a,k,f];
+  },
+  () => {
+    const a = new THREE.AmbientLight(0xffe0b0, 0.55);
+    const k = new THREE.DirectionalLight(0xffcc66, 3.4); k.position.set(6,7,4); k.castShadow=true; k.shadow.mapSize.setScalar(2048);
+    const f = new THREE.DirectionalLight(0xff5522, 0.9); f.position.set(-4,2,-5);
+    return [a,k,f];
+  },
+];
+let lightIdx=0, activeLights=[];
+function applyLights(i) {
+  activeLights.forEach(l => scene.remove(l));
+  activeLights = lightPresets[i]();
+  activeLights.forEach(l => scene.add(l));
+}
+applyLights(0);
+
+// Beacon point light
+const beaconLight = new THREE.PointLight(0xFFAA00, 0, 2.8);
+beaconLight.position.set(0.28, SH + 0.1, -0.22);
+scene.add(beaconLight);
+
+// ════════════════════════════════════════════
+//  GROUND
+// ════════════════════════════════════════════
+const groundM = new THREE.Mesh(new THREE.PlaneGeometry(30, 30), mat(0x07090f, 0.9, 0.1));
+groundM.rotation.x = -Math.PI/2; groundM.position.y = -SH - 0.02; groundM.receiveShadow = true;
+scene.add(groundM);
+const grid = new THREE.GridHelper(30, 30, 0x00d4ff, 0x001428);
+grid.material.opacity = 0.1; grid.material.transparent = true; grid.position.y = -SH - 0.018;
+scene.add(grid);
+
+// ════════════════════════════════════════════
+//  BUILD
+// ════════════════════════════════════════════
+let progress = 0;
+const ldbar = document.getElementById('ldbar');
+const progInt = setInterval(() => {
+  progress = Math.min(progress + Math.random()*12, 90);
+  ldbar.style.width = progress + '%';
+}, 60);
+
+const ledDomeMat = buildExterior();
+buildProtectiveCage();
+buildInterior();
+
+clearInterval(progInt);
+ldbar.style.width = '100%';
+setTimeout(() => {
+  document.getElementById('loader').classList.add('gone');
+  setTimeout(() => document.getElementById('loader').style.display = 'none', 700);
+  setTimeout(() => document.getElementById('hints').classList.add('fade'), 5000);
+}, 380);
+
+// ════════════════════════════════════════════
+//  STATE & UI
+// ════════════════════════════════════════════
+let autoRot = false, wireframeOn = false, beaconOn = true;
+
+// Cutaway toggle
+let cutaway = false;
+let cageVisible = true;
+function toggleCage(v) {
+  cageVisible = v !== undefined ? v : !cageVisible;
+  protectiveCageGroup.visible = cageVisible;
+  const b1 = document.getElementById('btn-cage');
+  const b2 = document.getElementById('btn-cage-side');
+  if (b1) b1.classList.toggle('active', cageVisible);
+  if (b2) b2.classList.toggle('on', cageVisible);
+}
+document.getElementById('btn-cage')?.addEventListener('click', () => toggleCage());
+document.getElementById('btn-cage-side')?.addEventListener('click', () => toggleCage());
+function toggleCutaway(on) {
+  cutaway = on;
+  document.getElementById('cutaway-label').classList.toggle('show', on);
+  document.getElementById('v-cutaway').classList.toggle('active', on);
+
+  if (on) {
+    // Apply clipping to exterior meshes
+    exteriorMeshes.forEach(m => {
+      const mats = [].concat(m.material);
+      mats.forEach(mt => {
+        mt.clippingPlanes = [cutPlane];
+        mt.clipShadows = true;
+      });
+    });
+    interiorGroup.visible = true;
+    // Fly to front cutaway view angle (matching reference image)
+    flyTo([0, 0.08, 3.8], [0, -0.05, 0]);
+  } else {
+    exteriorMeshes.forEach(m => {
+      const mats = [].concat(m.material);
+      mats.forEach(mt => { mt.clippingPlanes = []; });
+    });
+    interiorGroup.visible = false;
+    flyTo([3.8, 1.8, 4.2], [0, 0.15, 0]);
+  }
+}
+
+document.getElementById('btn-rotate').addEventListener('click', () => {
+  autoRot = !autoRot;
+  document.getElementById('btn-rotate').classList.toggle('on', autoRot);
+});
+
+document.getElementById('btn-wire').addEventListener('click', () => {
+  wireframeOn = !wireframeOn;
+  exteriorMeshes.forEach(m => {
+    const mats = [].concat(m.material);
+    mats.forEach(mt => { mt.wireframe = wireframeOn; });
+  });
+  document.getElementById('btn-wire').classList.toggle('on', wireframeOn);
+});
+
+document.getElementById('btn-beacon').addEventListener('click', () => {
+  beaconOn = !beaconOn;
+  if (!beaconOn) beaconLight.intensity = 0;
+  document.getElementById('btn-beacon').classList.toggle('on', beaconOn);
+});
+
+document.getElementById('btn-light').addEventListener('click', () => {
+  lightIdx = (lightIdx + 1) % lightPresets.length;
+  applyLights(lightIdx);
+});
+
+document.getElementById('btn-reset').addEventListener('click', () => {
+  toggleCutaway(false);
+  flyTo([3.8, 1.8, 4.2], [0, 0.15, 0]);
+});
+
+document.getElementById('btn-ss').addEventListener('click', () => {
+  renderer.render(scene, camera);
+  const a = document.createElement('a');
+  a.download = 'RESQ_Pod_3D.png'; a.href = canvas.toDataURL('image/png'); a.click();
+});
+
+function flyTo(pos, tgt) {
+  camera.position.set(...pos);
+  controls.target.set(...tgt);
+  controls.update();
+}
+
+document.getElementById('v-iso').addEventListener('click',    () => { toggleCutaway(false); flyTo([3.8,1.8,4.2],[0,0.15,0]); });
+document.getElementById('v-front').addEventListener('click',  () => { toggleCutaway(false); flyTo([0,0.3,5.8],[0,0.1,0]); });
+document.getElementById('v-side').addEventListener('click',   () => { toggleCutaway(false); flyTo([5.8,0.3,0],[0,0.1,0]); });
+document.getElementById('v-top').addEventListener('click',    () => { toggleCutaway(false); flyTo([0,7,0.01],[0,0,0]); });
+document.getElementById('v-cutaway').addEventListener('click',() => toggleCutaway(!cutaway));
+
+// ════════════════════════════════════════════
+//  ANIMATION LOOP
+// ════════════════════════════════════════════
+const clock = new THREE.Clock();
+
+function animate() {
+  requestAnimationFrame(animate);
+  const dt = clock.getDelta();
+  const t  = clock.getElapsedTime();
+
+  // Float
+  podGroup.position.y = Math.sin(t * 0.75) * 0.032;
+
+  // Auto-rotate
+  if (autoRot) podGroup.rotation.y += dt * 0.5;
+
+  // Beacon pulse
+  if (beaconOn) {
+    const pulse = Math.pow(Math.max(0, Math.sin(t * 6.28 * 1.0)), 5);
+    beaconLight.intensity = pulse * 4.0;
+    ledDomeMat.emissiveIntensity = 0.8 + pulse * 3.8;
+  }
+
+  controls.update();
+  renderer.render(scene, camera);
+}
+animate();
+
+window.addEventListener('resize', () => {
+  camera.aspect = innerWidth / innerHeight;
+  camera.updateProjectionMatrix();
+  renderer.setSize(innerWidth, innerHeight);
+});
+
+// Global API hook for programmatic screenshot capture and technical plan generation
+window.__resq = {
+  flyTo,
+  toggleCutaway,
+  camera,
+  scene,
+  renderer,
+  podGroup,
+  controls,
+  setBg: (col) => {
+    scene.background = new THREE.Color(col);
+    scene.fog = new THREE.Fog(col, 16, 38);
+    renderer.render(scene, camera);
+  }
+};
+</script>
+</body>
+</html>
